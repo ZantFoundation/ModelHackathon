@@ -38,9 +38,26 @@ def preprocessing(
 
     image = prepare_image(raw_image, image_size)
 
-    raise NotImplementedError
+    orig_height = tf.cast(tf.shape(raw_image)[0], tf.float32)
+    orig_width = tf.cast(tf.shape(raw_image)[1], tf.float32)
 
-    return {"image": image, "objects": objects}
+    
+    ymin, xmin, ymax, xmax = tf.split(raw_bboxes, 4, axis=-1)
+    ymin = ymin / orig_height
+    ymax = ymax / orig_height
+    xmin = xmin / orig_width
+    xmax = xmax / orig_width
+    bboxes = tf.concat([ymin, xmin, ymax, xmax], axis=-1)
+
+    bboxes = tf.cast(bboxes, tf.float32)
+    labels = tf.cast(raw_labels, tf.int32)
+
+    return {
+        "image": image,
+        "bboxes": bboxes,
+        "labels": labels         
+    }
+
 
 
 def augmentations(
