@@ -11,7 +11,7 @@ def to_4d(image: tf.Tensor) -> tf.Tensor:
     2D image => [1, H, W, 1]
 
     Args:
-      image: The 2/3/4D input tensor.
+      image: The 2/3/4D input tensor.update-global-crops-bboxes
 
     Returns:
       A 4D image tensor.
@@ -467,14 +467,22 @@ def create_global_crops(
         seeds = tf.random.split(seed_crops[i], 5)
 
         if bboxes is not None:
-            # Example:
-            # crop, crop_bboxes, crop_validbboxes = random_resized_crop(
-            #     image, size=size, scale=scale, bboxes=bboxes, seed=seeds[0]
-            # )
-            # crop, crop_bboxes = random_horizontal_flip(
-            #     crop, bboxes=crop_bboxes, seed=seeds[1]
-            # )
-            raise NotImplementedError
+            crop, crop_bboxes, valid_indices = random_resized_crop(
+                image,
+                size=size,
+                scale=scale,
+                bboxes=bboxes,
+                seed=seeds[0],
+            )
+            crop, crop_bboxes = random_horizontal_flip(
+                crop, seed=seeds[1], bboxes=crop_bboxes
+            )
+            crop_labels = tf.gather(labels, valid_indices[:, 0])
+
+            crops_heatmaps.append({
+                "bboxes": crop_bboxes,
+                "labels": crop_labels
+            })
         else:
             crop = random_resized_crop(image, size=size, scale=scale, seed=seeds[0])
             crop = random_horizontal_flip(crop, seed=seeds[1])
