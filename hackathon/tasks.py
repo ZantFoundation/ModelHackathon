@@ -12,7 +12,6 @@ TASK_TYPE: dict[KnownDataset, TaskType] = {
     "voc/2012": "object_detection",
 }
 
-
 def get_processing_functions(
     dataset: KnownDataset,
     preproc_kwargs: dict,
