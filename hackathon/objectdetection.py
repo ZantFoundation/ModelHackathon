@@ -22,6 +22,8 @@ from hackathon.preprocessing import (
     prepare_image,
 )
 
+from hackathon.metrics import compute_map
+
 
 def preprocessing(
     sample,
@@ -148,6 +150,45 @@ def train_step(params, static, optimizer, opt_state, batch, key):
     return params, opt_state, loss
 
 
+def postprocess_predictions(logits, conf_threshold=0.3):
+    """
+    Converts YOLO-style model output into detection predictions.
+
+    Args:
+        logits: jnp.array of shape [H, W, 4 + 1 + C]
+        conf_threshold: float, minimum score to keep a prediction
+
+    Returns:
+        List of dicts with keys: 'bbox', 'score', 'label'
+    """
+    H, W, D = logits.shape
+    num_classes = D - 5
+
+    logits = jax.nn.sigmoid(logits)  # apply sigmoid to all outputs
+
+    bboxes = logits[..., :4]         # center_x, center_y, width, height
+    objectness = logits[..., 4]      # shape [H, W]
+    class_probs = logits[..., 5:]    # shape [H, W, C]
+
+    scores = objectness[..., None] * class_probs  # shape [H, W, C]
+
+    results = []
+
+    for i in range(H):
+        for j in range(W):
+            for c in range(num_classes):
+                score = scores[i, j, c]
+                if score > conf_threshold:
+                    cx, cy, w, h = bboxes[i, j]
+                    bbox = [float(cx), float(cy), float(w), float(h)]
+                    results.append({
+                        "bbox": bbox,
+                        "score": float(score),
+                        "label": int(c)
+                    })
+    return results
+
+
 def evaluate(dataset, params, static, key, config, seed):
     dataset_identifier = get_identifier(dataset)
 
@@ -232,8 +273,32 @@ def evaluate(dataset, params, static, key, config, seed):
         )
         for batch in progress_bar:
             key, subkey = jr.split(key)
-            # Test on a given metric on the validation set (e.g. mAP)
-            raise NotImplementedError
+
+            images = batch["global_crops"][:, 0]  # (B, H, W, C)
+            images = nhwc_to_nchw(images)  # (B, C, H, W) since model expects NCHW
+
+            true_bboxes = batch["objects"]["bboxes"]
+            true_labels = batch["objects"]["labels"]
+
+            
+            model = eqx.combine(params, static)
+            preds = jax.vmap(model)(images)  # (B, H, W, A*(C+5))
+
+            
+            batch_map = []
+            for i in range(images.shape[0]):
+                pred_logits = preds[i]
+                gt_boxes = true_bboxes[i]
+                gt_labels = true_labels[i]
+
+                pred_objs = postprocess_predictions(pred_logits, conf_threshold=0.3)
+
+               
+                sample_ap = compute_map(pred_objs, gt_boxes, gt_labels)
+                batch_map.append(sample_ap)
+
+            avg_map = sum(batch_map) / len(batch_map)
+            progress_bar.set_postfix({"mAP@0.5": f"{avg_map:.4f}"})
 
     logger.info("Evaluation completed!")
 
