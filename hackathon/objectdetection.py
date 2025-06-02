@@ -56,28 +56,32 @@ def augmentations(
 
     image, bboxes, labels = sample["image"], sample["bboxes"], sample["labels"]
 
-    # global_crops, objects_crops = create_global_crops(
-    #     image,
-    #     bboxes=bboxes,
-    #     crops_number=n_global_crops,
-    #     num_classes=num_classes,
-    #     labels=labels,
-    #     seed=seeds[0],
-    #     **gc_kwargs,
-    # )
-
-    raise NotImplementedError
+    global_crops, crops_heatmaps = create_global_crops(
+        image,
+        crops_number=n_global_crops,
+        size=gc_kwargs.get("size"),
+        scale=gc_kwargs.get("scale"),
+        seed=seeds[0],
+        bboxes=bboxes,
+        labels=labels,
+        num_classes=num_classes,
+    )
 
     res = {
         "global_crops": global_crops,
-        "objects": objects_crops,
+        "objects": crops_heatmaps,  # List of {"bboxes": ..., "labels": ...}
     }
 
     if local_crops:
-        res["local_crops"] = create_local_crops(image, seed=seeds[1], **lc_kwargs)
+        res["local_crops"] = create_local_crops(
+            image,
+            crops_number=lc_kwargs.get("crops_number", 8),
+            size=lc_kwargs.get("size"),
+            scale=lc_kwargs.get("scale"),
+            seed=seeds[1],
+        )
 
     return res
-
 
 def postprocessing(
     sample,
